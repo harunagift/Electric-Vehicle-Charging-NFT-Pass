@@ -14,6 +14,8 @@ Voltpass enables seamless access to electric vehicle charging stations through N
 - 🔐 **Access Control**: Grant specific station access to pass holders
 - 📊 **Session Tracking**: Complete charging session history and analytics
 - 🔄 **Real-time Billing**: Automatic cost calculation based on usage time
+- 🔧 **Maintenance Tracking**: Schedule and track station maintenance with uptime monitoring
+- 📈 **Reliability Scoring**: Real-time station reliability metrics and operator incentives
 
 ## 🛠 Usage
 
@@ -41,6 +43,18 @@ Voltpass enables seamless access to electric vehicle charging stations through N
 (contract-call? .Voltpass end-charging-session u1 u1 u500)
 ```
 
+### Scheduling Station Maintenance
+
+```clarity
+(contract-call? .Voltpass schedule-maintenance u1 u1000 u1100 "Routine" "Monthly safety inspection")
+```
+
+### Checking Station Reliability
+
+```clarity
+(contract-call? .Voltpass calculate-reliability u1)
+```
+
 ## 📋 Contract Functions
 
 ### Public Functions
@@ -54,6 +68,11 @@ Voltpass enables seamless access to electric vehicle charging stations through N
 | `grant-station-access` | Grant station access to pass |
 | `start-charging-session` | Begin charging session |
 | `end-charging-session` | Complete charging session |
+| `schedule-maintenance` | Schedule station maintenance window |
+| `start-maintenance` | Begin scheduled maintenance |
+| `complete-maintenance` | Complete maintenance and restore operation |
+| `update-station-state` | Update station operational state |
+| `claim-operator-incentive` | Claim reliability-based rewards |
 | `deactivate-pass` | Deactivate a charging pass |
 
 ### Read-Only Functions
@@ -65,6 +84,11 @@ Voltpass enables seamless access to electric vehicle charging stations through N
 | `get-session` | Get session details |
 | `get-pass-balance` | Check pass balance |
 | `has-station-access` | Verify station access |
+| `get-station-status` | Get station operational status |
+| `get-maintenance-record` | Get maintenance record details |
+| `is-station-operational` | Check if station is available |
+| `calculate-reliability` | Get station reliability score |
+| `get-operator-incentives` | Check operator reward balance |
 
 ## 🏗 Data Structures
 
@@ -88,6 +112,19 @@ Voltpass enables seamless access to electric vehicle charging stations through N
 - Energy consumed
 - Cost calculation
 - Active status
+
+### Station Status
+- Operational state (1=Operational, 2=Maintenance, 3=Offline)
+- Last heartbeat timestamp
+- Total uptime/downtime tracking
+- Reliability score (0-100)
+- Maintenance history count
+
+### Maintenance Record
+- Station ID and operator
+- Scheduled vs actual start/end times
+- Maintenance type and description
+- Completion status
 
 ## 🔧 Development
 
@@ -132,6 +169,8 @@ The contract includes configurable parameters:
 - **Maximum Station Access**: 20 stations per pass
 - **Maximum Sessions**: 50 sessions per pass
 - **Maximum Stations per Operator**: 10 stations
+- **Maximum Maintenance History**: 10 records per station
+- **Default Reliability Threshold**: 85% for operator incentives
 
 ## 🔒 Security Features
 
@@ -153,6 +192,9 @@ The contract includes configurable parameters:
 | u105 | Already exists |
 | u106 | Session not active |
 | u107 | Unauthorized station access |
+| u110 | Station offline/maintenance |
+| u111 | Invalid maintenance parameters |
+| u112 | Maintenance already active |
 
 ## 🤝 Contributing
 
