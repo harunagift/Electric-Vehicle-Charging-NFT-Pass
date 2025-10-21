@@ -16,6 +16,11 @@
 (define-constant err-station-offline (err u110))
 (define-constant err-invalid-maintenance (err u111))
 (define-constant err-maintenance-active (err u112))
+(define-constant err-insufficient-credits (err u500))
+(define-constant err-listing-not-found (err u501))
+(define-constant err-invalid-quantity (err u502))
+(define-constant err-insufficient-payment (err u503))
+(define-constant err-not-listing-owner (err u504))
 
 (define-data-var last-token-id uint u0)
 (define-data-var base-uri (string-ascii 256) "https://api.voltpass.io/metadata/")
@@ -100,11 +105,19 @@
 
 (define-map station-maintenance-history uint (list 10 uint))
 (define-map operator-incentives principal uint)
+(define-map user-carbon-credits principal uint)
+(define-map carbon-listings uint {
+    seller: principal,
+    price: uint,
+    quantity: uint,
+    active: bool
+})
 
 (define-data-var next-station-id uint u1)
 (define-data-var next-session-id uint u1)
 (define-data-var next-maintenance-id uint u1)
 (define-data-var min-reliability-threshold uint u85)
+(define-data-var listing-nonce uint u0)
 
 (define-read-only (get-last-token-id)
     (ok (var-get last-token-id))
@@ -172,6 +185,18 @@
 
 (define-read-only (get-operator-incentives (operator principal))
     (default-to u0 (map-get? operator-incentives operator))
+)
+
+(define-read-only (get-user-carbon-balance (user principal))
+    (ok (default-to u0 (map-get? user-carbon-credits user)))
+)
+
+(define-read-only (get-listing (listing-id uint))
+    (ok (map-get? carbon-listings listing-id))
+)
+
+(define-read-only (get-listing-nonce)
+    (ok (var-get listing-nonce))
 )
 
 (define-read-only (is-station-operational (station-id uint))
@@ -444,6 +469,7 @@
         })
         
         (let ((heartbeat-result (heartbeat-station (get station-id session))))
+            (earn-carbon-credits user energy-consumed)
             (try! (as-contract (stx-transfer? cost tx-sender (get operator station)))))
         (ok cost)
     )
@@ -527,6 +553,13 @@
     )
 )
 
+(define-private (earn-carbon-credits (user principal) (energy-consumed uint))
+    (let ((credits-earned (/ energy-consumed u100))
+          (current-balance (default-to u0 (map-get? user-carbon-credits user))))
+        (map-set user-carbon-credits user (+ current-balance credits-earned))
+    )
+)
+
 (define-private (heartbeat-station (station-id uint))
     (let ((status (default-to {state: u1, last-heartbeat: u0, total-uptime: u0, total-downtime: u0, reliability-score: u100, maintenance-count: u0} (map-get? station-status station-id)))
           (time-since-last (- stacks-block-height (get last-heartbeat status))))
@@ -572,6 +605,52 @@
         (asserts! (is-eq tx-sender contract-owner) err-owner-only)
         (asserts! (and (>= new-threshold u50) (<= new-threshold u100)) err-invalid-maintenance)
         (var-set min-reliability-threshold new-threshold)
+        (ok true)
+    )
+)
+
+(define-public (list-carbon-credits (quantity uint) (price uint))
+    (let ((seller tx-sender)
+          (current-balance (default-to u0 (map-get? user-carbon-credits seller)))
+          (listing-id (var-get listing-nonce)))
+        (asserts! (> quantity u0) err-invalid-quantity)
+        (asserts! (>= current-balance quantity) err-insufficient-credits)
+        (map-set user-carbon-credits seller (- current-balance quantity))
+        (map-set carbon-listings listing-id {
+            seller: seller,
+            price: price,
+            quantity: quantity,
+            active: true
+        })
+        (var-set listing-nonce (+ listing-id u1))
+        (ok listing-id)
+    )
+)
+
+(define-public (buy-carbon-credits (listing-id uint))
+    (let ((listing (unwrap! (map-get? carbon-listings listing-id) err-listing-not-found))
+          (buyer tx-sender)
+          (seller (get seller listing))
+          (price (get price listing))
+          (quantity (get quantity listing))
+          (buyer-balance (default-to u0 (map-get? user-carbon-credits buyer))))
+        (asserts! (get active listing) err-listing-not-found)
+        (try! (stx-transfer? price buyer seller))
+        (map-set carbon-listings listing-id (merge listing {active: false}))
+        (map-set user-carbon-credits buyer (+ buyer-balance quantity))
+        (ok true)
+    )
+)
+
+(define-public (cancel-listing (listing-id uint))
+    (let ((listing (unwrap! (map-get? carbon-listings listing-id) err-listing-not-found))
+          (seller (get seller listing))
+          (quantity (get quantity listing))
+          (seller-balance (default-to u0 (map-get? user-carbon-credits seller))))
+        (asserts! (is-eq tx-sender seller) err-not-listing-owner)
+        (asserts! (get active listing) err-listing-not-found)
+        (map-set carbon-listings listing-id (merge listing {active: false}))
+        (map-set user-carbon-credits seller (+ seller-balance quantity))
         (ok true)
     )
 )
